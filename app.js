@@ -231,6 +231,32 @@ document.getElementById("search-form").addEventListener("submit", e => {
   if (q) searchByName(q);
 });
 
+/* Scorciatoie per supermercato (sfoglia i prodotti di un marchio) */
+document.querySelectorAll(".chip-store").forEach(chip => {
+  chip.addEventListener("click", () => searchByBrand(chip.dataset.brand, chip.textContent));
+});
+
+async function searchByBrand(brandTag, label) {
+  document.getElementById("result").innerHTML = "";
+  setStatus(`Carico i prodotti ${label}…`, "loading");
+  try {
+    const fields = "code,product_name,brands,image_front_small_url";
+    const url = `${OFF_BASE}/api/v2/search?brands_tags=${encodeURIComponent(brandTag)}` +
+      `&countries_tags=italy&sort_by=popularity_key&fields=${fields}&page_size=40`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const products = (data.products || []).filter(p => p.product_name && p.code);
+    if (!products.length) {
+      setStatus(`Nessun prodotto ${label} trovato. Prova a scansionare il codice a barre.`, "error");
+      return;
+    }
+    setStatus("");
+    renderSearchResults(products, label);
+  } catch (e) {
+    setStatus("Errore di rete: " + e.message, "error");
+  }
+}
+
 /* ============================================================
    Ricerca per nome su Open Food Facts
    ============================================================ */
