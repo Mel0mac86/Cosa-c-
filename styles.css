@@ -259,6 +259,28 @@ h2 { font-size: 1.2rem; margin: 0 0 6px; }
 .nutri-d { background: #ee8100; }
 .nutri-e { background: #e63e11; }
 
+/* Scorciatoie supermercati */
+.store-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.chip-store {
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 20px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.chip-store:hover { border-color: var(--green); color: var(--green); }
+
 /* Risultati ricerca per nome */
 .search-results { margin-bottom: 12px; }
 .search-results .sr-title { font-size: 0.85rem; color: var(--muted); margin: 0 0 8px; }
@@ -299,6 +321,17 @@ h2 { font-size: 1.2rem; margin: 0 0 6px; }
 .history-list .h-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .history-list .h-time { font-size: 0.78rem; color: var(--muted); }
 .h-badge { font-size: 1.3rem; flex-shrink: 0; }
+
+.add-product-btn {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 12px 16px;
+  background: var(--green);
+  color: #fff;
+  border-radius: 10px;
+  text-decoration: none;
+  font-weight: 700;
+}
 
 .app-footer {
   max-width: 560px;

@@ -94,7 +94,7 @@ function clearHistory() {
   saveHistory([]);
   renderHistory();
 }
-const STATUS_ICON = { danger: "🚫", traces: "⚠️", safe: "✅", unknown: "ℹ️" };
+const STATUS_ICON = { danger: "🚫", traces: "⚠️", safe: "✅", unknown: "ℹ️", nodata: "⚠️" };
 
 function renderHistory() {
   const list = document.getElementById("history-list");
@@ -231,6 +231,32 @@ document.getElementById("search-form").addEventListener("submit", e => {
   if (q) searchByName(q);
 });
 
+/* Scorciatoie per supermercato (sfoglia i prodotti di un marchio) */
+document.querySelectorAll(".chip-store").forEach(chip => {
+  chip.addEventListener("click", () => searchByBrand(chip.dataset.brand, chip.textContent));
+});
+
+async function searchByBrand(brandTag, label) {
+  document.getElementById("result").innerHTML = "";
+  setStatus(`Carico i prodotti ${label}…`, "loading");
+  try {
+    const fields = "code,product_name,brands,image_front_small_url";
+    const url = `${OFF_BASE}/api/v2/search?brands_tags=${encodeURIComponent(brandTag)}` +
+      `&countries_tags=italy&sort_by=popularity_key&fields=${fields}&page_size=40`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const products = (data.products || []).filter(p => p.product_name && p.code);
+    if (!products.length) {
+      setStatus(`Nessun prodotto ${label} trovato. Prova a scansionare il codice a barre.`, "error");
+      return;
+    }
+    setStatus("");
+    renderSearchResults(products, label);
+  } catch (e) {
+    setStatus("Errore di rete: " + e.message, "error");
+  }
+}
+
 /* ============================================================
    Ricerca per nome su Open Food Facts
    ============================================================ */
@@ -277,22 +303,55 @@ function renderSearchResults(products, query) {
 }
 
 /* ============================================================
-   Ricerca prodotto su Open Food Facts
+   Ricerca prodotto su Open Food Facts (database live: 3,6+ milioni
+   di prodotti). Niente da precaricare: ogni codice viene cercato al volo.
    ============================================================ */
+const PRODUCT_FIELDS = "product_name,brands,image_front_url,ingredients_text,ingredients_text_it,allergens_tags,traces_tags,categories_tags,nutriscore_grade,code";
+
+/* Varianti plausibili dello stesso codice a barre, così uno scan riconosce
+   anche prodotti salvati in un formato diverso (UPC-A 12 vs EAN-13, zeri iniziali). */
+function barcodeVariants(code) {
+  const c = String(code).replace(/\D/g, "");
+  const set = new Set([c]);
+  if (c.length === 12) set.add("0" + c);            // UPC-A → EAN-13
+  if (c.length === 13 && c.startsWith("0")) set.add(c.slice(1)); // EAN-13 con zero → UPC-A
+  if (c.length === 8) set.add(c.padStart(13, "0")); // EAN-8 → EAN-13 con padding
+  return [...set];
+}
+
+async function fetchProduct(barcode) {
+  const res = await fetch(`${OFF_BASE}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${PRODUCT_FIELDS}`);
+  const data = await res.json();
+  return (data && data.status !== 0 && data.product) ? data.product : null;
+}
+
 async function lookupProduct(barcode) {
   document.getElementById("result").innerHTML = "";
   setStatus("Cerco il prodotto " + barcode + "…", "loading");
   try {
-    const fields = "product_name,brands,image_front_url,ingredients_text,ingredients_text_it,allergens_tags,traces_tags,categories_tags,nutriscore_grade,code";
-    const res = await fetch(`${OFF_BASE}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${fields}`);
-    const data = await res.json();
+    let product = null;
+    for (const code of barcodeVariants(barcode)) {
+      product = await fetchProduct(code);
+      if (product) break;
+    }
 
-    if (!data || data.status === 0 || !data.product) {
-      setStatus(`Prodotto ${barcode} non trovato in Open Food Facts. Controlla l'etichetta manualmente.`, "error");
+    if (!product) {
+      const clean = String(barcode).replace(/\D/g, "");
+      setStatus("", "error");
+      document.getElementById("result").innerHTML = `
+        <div class="product-card">
+          <div class="verdict unknown">❓ Prodotto ${escapeHtml(clean)} non ancora nel database</div>
+          <div class="section-block">
+            <p>Questo codice non è ancora presente su Open Food Facts (database collaborativo).
+            Controlla l'etichetta a mano per sicurezza.</p>
+            <p style="margin-top:10px">Puoi <strong>aggiungerlo tu</strong> in 1 minuto, così la prossima volta verrà riconosciuto:</p>
+            <a class="add-product-btn" href="https://world.openfoodfacts.org/cgi/product.pl?type=add&code=${encodeURIComponent(clean)}" target="_blank" rel="noopener">➕ Aggiungi questo prodotto</a>
+          </div>
+        </div>`;
       return;
     }
     setStatus("");
-    analyzeAndRender(data.product);
+    analyzeAndRender(product);
   } catch (e) {
     setStatus("Errore di rete durante la ricerca: " + e.message, "error");
   }
@@ -355,25 +414,30 @@ async function analyzeAndRender(product) {
   const brand = product.brands || "";
   const img = product.image_front_url || "";
   const ingText = getIngredientsText(product);
+  // Dati allergeni assenti se non c'è né la lista ingredienti né i tag allergeni
+  const hasData = ingText.trim().length > 0 ||
+    (product.allergens_tags && product.allergens_tags.length > 0);
 
-  let verdictClass, verdictText;
+  let verdictClass, verdictText, histStatus;
   if (allergens.length === 0) {
-    verdictClass = "unknown";
+    verdictClass = "unknown"; histStatus = "unknown";
     verdictText = "ℹ️ Nessun allergene impostato — aggiungili nella scheda \"I miei allergeni\".";
   } else if (danger.length) {
-    verdictClass = "danger";
+    verdictClass = "danger"; histStatus = "danger";
     verdictText = "🚫 ATTENZIONE! Contiene: " + danger.join(", ").toUpperCase();
   } else if (traces.length) {
-    verdictClass = "unknown";
+    verdictClass = "unknown"; histStatus = "traces";
     verdictText = "⚠️ Può contenere TRACCE di: " + traces.join(", ");
+  } else if (!hasData) {
+    // Trovato ma SENZA dati ingredienti: non è "sicuro", è "non verificabile"
+    verdictClass = "unknown"; histStatus = "nodata";
+    verdictText = "⚠️ Ingredienti non disponibili — non posso verificare. Controlla l'etichetta!";
   } else {
-    verdictClass = "safe";
+    verdictClass = "safe"; histStatus = "safe";
     verdictText = "✅ Nessuno dei tuoi allergeni rilevato";
   }
 
   // Salva nella cronologia (anche se nessun allergene impostato)
-  const histStatus = danger.length ? "danger" : traces.length ? "traces"
-    : allergens.length ? "safe" : "unknown";
   addToHistory({
     code: product.code || "",
     name, brand,
