@@ -277,22 +277,55 @@ function renderSearchResults(products, query) {
 }
 
 /* ============================================================
-   Ricerca prodotto su Open Food Facts
+   Ricerca prodotto su Open Food Facts (database live: 3,6+ milioni
+   di prodotti). Niente da precaricare: ogni codice viene cercato al volo.
    ============================================================ */
+const PRODUCT_FIELDS = "product_name,brands,image_front_url,ingredients_text,ingredients_text_it,allergens_tags,traces_tags,categories_tags,nutriscore_grade,code";
+
+/* Varianti plausibili dello stesso codice a barre, così uno scan riconosce
+   anche prodotti salvati in un formato diverso (UPC-A 12 vs EAN-13, zeri iniziali). */
+function barcodeVariants(code) {
+  const c = String(code).replace(/\D/g, "");
+  const set = new Set([c]);
+  if (c.length === 12) set.add("0" + c);            // UPC-A → EAN-13
+  if (c.length === 13 && c.startsWith("0")) set.add(c.slice(1)); // EAN-13 con zero → UPC-A
+  if (c.length === 8) set.add(c.padStart(13, "0")); // EAN-8 → EAN-13 con padding
+  return [...set];
+}
+
+async function fetchProduct(barcode) {
+  const res = await fetch(`${OFF_BASE}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${PRODUCT_FIELDS}`);
+  const data = await res.json();
+  return (data && data.status !== 0 && data.product) ? data.product : null;
+}
+
 async function lookupProduct(barcode) {
   document.getElementById("result").innerHTML = "";
   setStatus("Cerco il prodotto " + barcode + "…", "loading");
   try {
-    const fields = "product_name,brands,image_front_url,ingredients_text,ingredients_text_it,allergens_tags,traces_tags,categories_tags,nutriscore_grade,code";
-    const res = await fetch(`${OFF_BASE}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${fields}`);
-    const data = await res.json();
+    let product = null;
+    for (const code of barcodeVariants(barcode)) {
+      product = await fetchProduct(code);
+      if (product) break;
+    }
 
-    if (!data || data.status === 0 || !data.product) {
-      setStatus(`Prodotto ${barcode} non trovato in Open Food Facts. Controlla l'etichetta manualmente.`, "error");
+    if (!product) {
+      const clean = String(barcode).replace(/\D/g, "");
+      setStatus("", "error");
+      document.getElementById("result").innerHTML = `
+        <div class="product-card">
+          <div class="verdict unknown">❓ Prodotto ${escapeHtml(clean)} non ancora nel database</div>
+          <div class="section-block">
+            <p>Questo codice non è ancora presente su Open Food Facts (database collaborativo).
+            Controlla l'etichetta a mano per sicurezza.</p>
+            <p style="margin-top:10px">Puoi <strong>aggiungerlo tu</strong> in 1 minuto, così la prossima volta verrà riconosciuto:</p>
+            <a class="add-product-btn" href="https://world.openfoodfacts.org/cgi/product.pl?type=add&code=${encodeURIComponent(clean)}" target="_blank" rel="noopener">➕ Aggiungi questo prodotto</a>
+          </div>
+        </div>`;
       return;
     }
     setStatus("");
-    analyzeAndRender(data.product);
+    analyzeAndRender(product);
   } catch (e) {
     setStatus("Errore di rete durante la ricerca: " + e.message, "error");
   }

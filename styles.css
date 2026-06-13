@@ -300,6 +300,17 @@ h2 { font-size: 1.2rem; margin: 0 0 6px; }
 .history-list .h-time { font-size: 0.78rem; color: var(--muted); }
 .h-badge { font-size: 1.3rem; flex-shrink: 0; }
 
+.add-product-btn {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 12px 16px;
+  background: var(--green);
+  color: #fff;
+  border-radius: 10px;
+  text-decoration: none;
+  font-weight: 700;
+}
+
 .app-footer {
   max-width: 560px;
   margin: 20px auto;
