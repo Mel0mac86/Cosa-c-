@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#16a34a" />
+  <title>AllerScan — Scanner allergeni</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>🛡️ AllerScan</h1>
+    <p class="tagline">Scansiona, controlla gli ingredienti, evita i tuoi allergeni.</p>
+  </header>
+
+  <!-- Navigazione a schede -->
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="scan">📷 Scansiona</button>
+    <button class="tab-btn" data-tab="allergens">⚠️ I miei allergeni</button>
+  </nav>
+
+  <main>
+    <!-- SEZIONE ALLERGENI -->
+    <section id="tab-allergens" class="tab-panel">
+      <h2>I miei ingredienti da evitare</h2>
+      <p class="hint">Scrivi gli ingredienti a cui sei <strong>intollerante o allergico</strong>.
+        Aggiungine uno alla volta (es. <em>latte</em>, <em>arachidi</em>, <em>glutine</em>).</p>
+
+      <form id="allergen-form" class="allergen-form">
+        <input type="text" id="allergen-input" placeholder="Es. arachidi" autocomplete="off" />
+        <button type="submit">➕ Aggiungi</button>
+      </form>
+
+      <div class="quick-add">
+        <span>Comuni:</span>
+        <button class="chip-suggest" data-value="latte">Latte</button>
+        <button class="chip-suggest" data-value="glutine">Glutine</button>
+        <button class="chip-suggest" data-value="uova">Uova</button>
+        <button class="chip-suggest" data-value="arachidi">Arachidi</button>
+        <button class="chip-suggest" data-value="frutta a guscio">Frutta a guscio</button>
+        <button class="chip-suggest" data-value="soia">Soia</button>
+        <button class="chip-suggest" data-value="pesce">Pesce</button>
+        <button class="chip-suggest" data-value="crostacei">Crostacei</button>
+        <button class="chip-suggest" data-value="sesamo">Sesamo</button>
+      </div>
+
+      <ul id="allergen-list" class="allergen-list"></ul>
+      <p id="allergen-empty" class="empty-note">Nessun allergene impostato. Aggiungine almeno uno per ricevere avvisi.</p>
+    </section>
+
+    <!-- SEZIONE SCANSIONE -->
+    <section id="tab-scan" class="tab-panel active">
+      <div id="scanner-wrap" class="scanner-wrap">
+        <video id="video" playsinline></video>
+        <div class="scan-overlay"><div class="scan-line"></div></div>
+      </div>
+
+      <div class="scan-controls">
+        <button id="start-btn" class="primary">▶️ Avvia fotocamera</button>
+        <button id="stop-btn" class="secondary" hidden>⏹️ Ferma</button>
+      </div>
+
+      <form id="manual-form" class="manual-form">
+        <input type="text" id="manual-input" inputmode="numeric" placeholder="Inserisci codice a barre a mano" autocomplete="off" />
+        <button type="submit">🔍 Cerca</button>
+      </form>
+
+      <div id="status" class="status" hidden></div>
+      <div id="result" class="result"></div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    Dati prodotti da <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>.
+    Questa app è un aiuto, <strong>non sostituisce</strong> la lettura dell'etichetta ufficiale.
+  </footer>
+
+  <!-- Libreria scansione codici a barre -->
+  <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

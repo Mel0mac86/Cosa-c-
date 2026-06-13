@@ -1,0 +1,391 @@
+/* ============================================================
+   AllerScan — scanner di allergeni con Open Food Facts
+   ============================================================ */
+
+const STORAGE_KEY = "allerscan.allergens";
+const OFF_BASE = "https://world.openfoodfacts.org";
+
+/* ---- Dizionario sinonimi (italiano <-> termini tag inglesi) ----
+   Aiuta a far combaciare ciò che scrive l'utente con i dati OFF,
+   che mescolano italiano nel testo ingredienti e tag in inglese. */
+const SYNONYMS = {
+  "latte":        ["latte", "milk", "lactose", "lattosio", "siero di latte", "whey", "caseina", "casein", "burro", "butter", "panna", "cream", "formaggio"],
+  "lattosio":     ["lattosio", "lactose", "latte", "milk"],
+  "glutine":      ["glutine", "gluten", "frumento", "wheat", "grano", "orzo", "barley", "segale", "rye", "avena", "oats", "farro", "spelt", "farina di frumento"],
+  "frumento":     ["frumento", "wheat", "grano", "farina di frumento"],
+  "uova":         ["uova", "uovo", "egg", "eggs", "albume", "tuorlo"],
+  "arachidi":     ["arachidi", "arachide", "peanut", "peanuts"],
+  "frutta a guscio": ["frutta a guscio", "nuts", "nut", "mandorl", "almond", "nocciol", "hazelnut", "noci", "walnut", "anacardi", "cashew", "pistacch", "pistachio", "noce di macadamia"],
+  "soia":         ["soia", "soy", "soya", "lecitina di soia"],
+  "pesce":        ["pesce", "fish", "tonno", "tuna", "salmone", "salmon", "acciug", "anchovy", "merluzzo"],
+  "crostacei":    ["crostacei", "crostaceo", "crustacean", "gamber", "shrimp", "prawn", "granchio", "crab", "aragosta", "lobster"],
+  "molluschi":    ["molluschi", "mollusc", "vongol", "clam", "cozze", "mussel", "calamar", "squid", "polpo"],
+  "sesamo":       ["sesamo", "sesame"],
+  "sedano":       ["sedano", "celery"],
+  "senape":       ["senape", "mustard"],
+  "solfiti":      ["solfiti", "solfito", "sulphite", "sulfite", "anidride solforosa", "e220", "e221", "e222", "e223", "e224", "e226", "e227", "e228"],
+  "lupini":       ["lupini", "lupino", "lupin"],
+};
+
+let allergens = loadAllergens();
+
+/* ============================================================
+   Gestione allergeni (localStorage)
+   ============================================================ */
+function loadAllergens() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch { return []; }
+}
+function saveAllergens() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(allergens));
+}
+function addAllergen(value) {
+  const v = value.trim().toLowerCase();
+  if (!v) return;
+  if (!allergens.includes(v)) {
+    allergens.push(v);
+    saveAllergens();
+    renderAllergens();
+  }
+}
+function removeAllergen(value) {
+  allergens = allergens.filter(a => a !== value);
+  saveAllergens();
+  renderAllergens();
+}
+function renderAllergens() {
+  const list = document.getElementById("allergen-list");
+  const empty = document.getElementById("allergen-empty");
+  list.innerHTML = "";
+  allergens.forEach(a => {
+    const li = document.createElement("li");
+    const span = document.createElement("span");
+    span.textContent = a;
+    const btn = document.createElement("button");
+    btn.className = "remove-btn";
+    btn.textContent = "Rimuovi";
+    btn.onclick = () => removeAllergen(a);
+    li.append(span, btn);
+    list.appendChild(li);
+  });
+  empty.style.display = allergens.length ? "none" : "block";
+}
+
+/* Termini di ricerca espansi per un allergene dato */
+function termsFor(allergen) {
+  const key = allergen.toLowerCase();
+  const base = SYNONYMS[key] ? [...SYNONYMS[key]] : [];
+  if (!base.includes(key)) base.push(key);
+  return base.map(t => t.toLowerCase());
+}
+
+/* ============================================================
+   Tab navigation
+   ============================================================ */
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+  });
+});
+
+/* ============================================================
+   Form allergeni
+   ============================================================ */
+document.getElementById("allergen-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const input = document.getElementById("allergen-input");
+  addAllergen(input.value);
+  input.value = "";
+  input.focus();
+});
+document.querySelectorAll(".chip-suggest").forEach(chip => {
+  chip.addEventListener("click", () => addAllergen(chip.dataset.value));
+});
+
+/* ============================================================
+   Stato / messaggi
+   ============================================================ */
+function setStatus(msg, type = "info") {
+  const el = document.getElementById("status");
+  if (!msg) { el.hidden = true; return; }
+  el.hidden = false;
+  el.className = "status " + type;
+  el.textContent = msg;
+}
+
+/* ============================================================
+   Scanner codici a barre (ZXing)
+   ============================================================ */
+let codeReader = null;
+let scanning = false;
+
+async function startScanner() {
+  if (typeof ZXing === "undefined") {
+    setStatus("Libreria scanner non caricata (serve connessione internet).", "error");
+    return;
+  }
+  try {
+    codeReader = codeReader || new ZXing.BrowserMultiFormatReader();
+    setStatus("Inquadra il codice a barre…", "loading");
+    document.getElementById("start-btn").hidden = true;
+    document.getElementById("stop-btn").hidden = false;
+    scanning = true;
+
+    await codeReader.decodeFromVideoDevice(null, "video", (result, err) => {
+      if (result && scanning) {
+        const code = result.getText();
+        stopScanner();
+        lookupProduct(code);
+      }
+    });
+  } catch (e) {
+    setStatus("Impossibile accedere alla fotocamera: " + e.message + ". Usa l'inserimento manuale.", "error");
+    stopScanner();
+  }
+}
+
+function stopScanner() {
+  scanning = false;
+  if (codeReader) {
+    try { codeReader.reset(); } catch {}
+  }
+  document.getElementById("start-btn").hidden = false;
+  document.getElementById("stop-btn").hidden = true;
+}
+
+document.getElementById("start-btn").addEventListener("click", startScanner);
+document.getElementById("stop-btn").addEventListener("click", () => {
+  stopScanner();
+  setStatus("Scansione interrotta.", "info");
+});
+
+/* Inserimento manuale */
+document.getElementById("manual-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const input = document.getElementById("manual-input");
+  const code = input.value.trim();
+  if (code) lookupProduct(code);
+});
+
+/* ============================================================
+   Ricerca prodotto su Open Food Facts
+   ============================================================ */
+async function lookupProduct(barcode) {
+  document.getElementById("result").innerHTML = "";
+  setStatus("Cerco il prodotto " + barcode + "…", "loading");
+  try {
+    const fields = "product_name,brands,image_front_url,ingredients_text,ingredients_text_it,allergens_tags,traces_tags,categories_tags,nutriscore_grade,code";
+    const res = await fetch(`${OFF_BASE}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${fields}`);
+    const data = await res.json();
+
+    if (!data || data.status === 0 || !data.product) {
+      setStatus(`Prodotto ${barcode} non trovato in Open Food Facts. Controlla l'etichetta manualmente.`, "error");
+      return;
+    }
+    setStatus("");
+    analyzeAndRender(data.product);
+  } catch (e) {
+    setStatus("Errore di rete durante la ricerca: " + e.message, "error");
+  }
+}
+
+/* ============================================================
+   Analisi allergeni + rendering
+   ============================================================ */
+function getIngredientsText(product) {
+  return product.ingredients_text_it || product.ingredients_text || "";
+}
+
+/* Restituisce { danger:[], traces:[], allTerms:[] } degli allergeni trovati */
+function analyzeProduct(product) {
+  const text = getIngredientsText(product).toLowerCase();
+  const allergenTags = (product.allergens_tags || []).join(" ").toLowerCase();
+  const tracesTags = (product.traces_tags || []).join(" ").toLowerCase();
+
+  const danger = [];   // presente negli ingredienti / allergeni
+  const traces = [];   // solo nelle tracce ("può contenere")
+  const matchedTerms = [];
+
+  allergens.forEach(allergen => {
+    const terms = termsFor(allergen);
+    let inMain = false, inTraces = false;
+    terms.forEach(t => {
+      if (text.includes(t) || allergenTags.includes(t)) { inMain = true; matchedTerms.push(t); }
+      else if (tracesTags.includes(t)) { inTraces = true; }
+    });
+    if (inMain) danger.push(allergen);
+    else if (inTraces) traces.push(allergen);
+  });
+
+  return { danger, traces, matchedTerms: [...new Set(matchedTerms)] };
+}
+
+/* Evidenzia i termini trovati nel testo ingredienti */
+function highlightIngredients(text, terms) {
+  if (!text) return "<em>Lista ingredienti non disponibile su Open Food Facts.</em>";
+  let html = escapeHtml(text);
+  // ordina per lunghezza decrescente per evitare match parziali sovrapposti
+  [...terms].sort((a, b) => b.length - a.length).forEach(term => {
+    if (!term) return;
+    const re = new RegExp("(" + escapeRegExp(term) + ")", "gi");
+    html = html.replace(re, "<mark>$1</mark>");
+  });
+  return html;
+}
+
+function nutriBadge(grade) {
+  if (!grade) return "";
+  const g = grade.toLowerCase();
+  return `<span class="nutri nutri-${g}">Nutri-Score ${grade.toUpperCase()}</span>`;
+}
+
+async function analyzeAndRender(product) {
+  const { danger, traces, matchedTerms } = analyzeProduct(product);
+  const result = document.getElementById("result");
+  const name = product.product_name || "Prodotto senza nome";
+  const brand = product.brands || "";
+  const img = product.image_front_url || "";
+  const ingText = getIngredientsText(product);
+
+  let verdictClass, verdictText;
+  if (allergens.length === 0) {
+    verdictClass = "unknown";
+    verdictText = "ℹ️ Nessun allergene impostato — aggiungili nella scheda \"I miei allergeni\".";
+  } else if (danger.length) {
+    verdictClass = "danger";
+    verdictText = "🚫 ATTENZIONE! Contiene: " + danger.join(", ").toUpperCase();
+  } else if (traces.length) {
+    verdictClass = "unknown";
+    verdictText = "⚠️ Può contenere TRACCE di: " + traces.join(", ");
+  } else {
+    verdictClass = "safe";
+    verdictText = "✅ Nessuno dei tuoi allergeni rilevato";
+  }
+
+  let html = `
+    <div class="product-card">
+      <div class="verdict ${verdictClass}">${verdictText}</div>
+      <div class="product-head">
+        ${img ? `<img src="${escapeHtml(img)}" alt="" />` : ""}
+        <div>
+          <div class="pname">${escapeHtml(name)}</div>
+          ${brand ? `<div class="pbrand">${escapeHtml(brand)}</div>` : ""}
+          <div style="margin-top:6px">${nutriBadge(product.nutriscore_grade)}</div>
+        </div>
+      </div>`;
+
+  if (danger.length) {
+    html += `<div class="section-block">
+      <h3>Allergeni trovati</h3>
+      <ul class="match-list">
+        ${danger.map(d => `<li>🚫 ${escapeHtml(d)}</li>`).join("")}
+      </ul>
+    </div>`;
+  }
+  if (traces.length) {
+    html += `<div class="section-block">
+      <h3>Possibili tracce</h3>
+      <ul class="match-list">
+        ${traces.map(d => `<li>⚠️ ${escapeHtml(d)}</li>`).join("")}
+      </ul>
+    </div>`;
+  }
+
+  html += `<div class="section-block">
+      <h3>Ingredienti</h3>
+      <div class="ingredients-text">${highlightIngredients(ingText, matchedTerms)}</div>
+    </div>`;
+
+  // Spazio per l'alternativa (caricata in modo asincrono)
+  if (danger.length) {
+    html += `<div class="section-block" id="alt-block">
+      <h3>Alternativa consigliata</h3>
+      <div id="alt-content" class="status loading" style="margin:0">Cerco un'alternativa senza ${escapeHtml(danger.join(", "))}…</div>
+    </div>`;
+  }
+
+  html += `</div>`;
+  result.innerHTML = html;
+
+  if (danger.length) findAlternative(product);
+}
+
+/* ============================================================
+   Ricerca di un'alternativa senza l'allergene
+   ============================================================ */
+async function findAlternative(product) {
+  const altContent = document.getElementById("alt-content");
+  const cats = product.categories_tags || [];
+  if (!cats.length) {
+    if (altContent) altContent.outerHTML = `<p class="empty-note">Categoria sconosciuta: nessuna alternativa automatica. Cerca un prodotto simile leggendo l'etichetta.</p>`;
+    return;
+  }
+  // categoria più specifica (di solito l'ultima)
+  const category = cats[cats.length - 1];
+
+  try {
+    const fields = "code,product_name,brands,image_front_small_url,nutriscore_grade,allergens_tags,traces_tags,ingredients_text,ingredients_text_it";
+    const url = `${OFF_BASE}/api/v2/search?categories_tags=${encodeURIComponent(category)}&fields=${fields}&page_size=50&sort_by=nutriscore_score`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const candidates = (data.products || []).filter(p => {
+      if (!p.product_name || p.code === product.code) return false;
+      // riusa la logica di analisi: deve essere privo di allergeni dell'utente
+      const a = analyzeProduct(p);
+      return a.danger.length === 0 && a.traces.length === 0;
+    });
+
+    // preferisci con Nutri-Score migliore e con immagine
+    candidates.sort((a, b) => nutriRank(a.nutriscore_grade) - nutriRank(b.nutriscore_grade));
+    const best = candidates.find(p => p.image_front_small_url) || candidates[0];
+
+    if (!best) {
+      if (altContent) altContent.outerHTML = `<p class="empty-note">Nessuna alternativa sicura trovata automaticamente in questa categoria. Verifica sempre l'etichetta.</p>`;
+      return;
+    }
+
+    const altHtml = `
+      <div class="alt-card">
+        ${best.image_front_small_url ? `<img src="${escapeHtml(best.image_front_small_url)}" alt="" />` : ""}
+        <div>
+          <div class="alt-name">${escapeHtml(best.product_name)}</div>
+          <div class="alt-meta">${escapeHtml(best.brands || "")}</div>
+          <div style="margin-top:4px">${nutriBadge(best.nutriscore_grade)}</div>
+          <div class="alt-meta">Codice: ${escapeHtml(best.code)}</div>
+        </div>
+      </div>
+      <p class="empty-note" style="margin-top:8px">Suggerimento automatico privo dei tuoi allergeni. Controlla comunque l'etichetta.</p>`;
+    if (altContent) altContent.outerHTML = altHtml;
+  } catch (e) {
+    if (altContent) altContent.outerHTML = `<p class="empty-note">Impossibile cercare un'alternativa: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function nutriRank(grade) {
+  const order = { a: 1, b: 2, c: 3, d: 4, e: 5 };
+  return order[(grade || "").toLowerCase()] || 9;
+}
+
+/* ============================================================
+   Utility
+   ============================================================ */
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/* ============================================================
+   Avvio
+   ============================================================ */
+renderAllergens();
+if (allergens.length === 0) {
+  // porta l'utente prima a impostare gli allergeni
+  document.querySelector('.tab-btn[data-tab="allergens"]').click();
+}
