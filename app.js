@@ -224,6 +224,58 @@ document.getElementById("manual-form").addEventListener("submit", e => {
   if (code) lookupProduct(code);
 });
 
+/* Ricerca per nome prodotto */
+document.getElementById("search-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const q = document.getElementById("search-input").value.trim();
+  if (q) searchByName(q);
+});
+
+/* ============================================================
+   Ricerca per nome su Open Food Facts
+   ============================================================ */
+async function searchByName(query) {
+  document.getElementById("result").innerHTML = "";
+  setStatus(`Cerco prodotti per "${query}"…`, "loading");
+  try {
+    const fields = "code,product_name,brands,image_front_small_url";
+    const url = `${OFF_BASE}/cgi/search.pl?search_terms=${encodeURIComponent(query)}` +
+      `&search_simple=1&action=process&json=1&page_size=20&fields=${fields}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const products = (data.products || []).filter(p => p.product_name && p.code);
+
+    if (!products.length) {
+      setStatus(`Nessun prodotto trovato per "${query}".`, "error");
+      return;
+    }
+    setStatus("");
+    renderSearchResults(products, query);
+  } catch (e) {
+    setStatus("Errore di rete nella ricerca: " + e.message, "error");
+  }
+}
+
+function renderSearchResults(products, query) {
+  const result = document.getElementById("result");
+  const ul = products.map(p => `
+    <li data-code="${escapeHtml(p.code)}">
+      ${p.image_front_small_url ? `<img src="${escapeHtml(p.image_front_small_url)}" alt="" />`
+        : `<div style="width:46px;height:46px;background:#f1f5f9;border-radius:8px;flex-shrink:0"></div>`}
+      <div>
+        <div class="sr-name">${escapeHtml(p.product_name)}</div>
+        <div class="sr-brand">${escapeHtml(p.brands || "")}</div>
+      </div>
+    </li>`).join("");
+  result.innerHTML = `<div class="search-results">
+    <p class="sr-title">${products.length} risultati per "${escapeHtml(query)}" — tocca per analizzare</p>
+    <ul>${ul}</ul>
+  </div>`;
+  result.querySelectorAll("li[data-code]").forEach(li => {
+    li.addEventListener("click", () => lookupProduct(li.dataset.code));
+  });
+}
+
 /* ============================================================
    Ricerca prodotto su Open Food Facts
    ============================================================ */
@@ -449,6 +501,27 @@ function escapeRegExp(str) {
 /* Pulsante svuota cronologia */
 document.getElementById("clear-history").addEventListener("click", () => {
   if (confirm("Vuoi svuotare la cronologia delle scansioni?")) clearHistory();
+});
+
+/* Esporta cronologia (JSON scaricabile) */
+document.getElementById("export-history").addEventListener("click", () => {
+  const items = loadHistory();
+  if (!items.length) { alert("La cronologia è vuota."); return; }
+  const payload = {
+    app: "AllerScan",
+    esportato: new Date().toISOString(),
+    allergeni: allergens,
+    scansioni: items,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `allerscan-cronologia-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 });
 
 /* ============================================================

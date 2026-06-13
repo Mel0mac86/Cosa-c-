@@ -259,8 +259,27 @@ h2 { font-size: 1.2rem; margin: 0 0 6px; }
 .nutri-d { background: #ee8100; }
 .nutri-e { background: #e63e11; }
 
+/* Risultati ricerca per nome */
+.search-results { margin-bottom: 12px; }
+.search-results .sr-title { font-size: 0.85rem; color: var(--muted); margin: 0 0 8px; }
+.search-results li {
+  display: flex; gap: 12px; align-items: center;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; list-style: none;
+}
+.search-results ul { padding: 0; margin: 0; }
+.search-results li:hover { border-color: var(--green); }
+.search-results img {
+  width: 46px; height: 46px; object-fit: contain;
+  background: #f1f5f9; border-radius: 8px; flex-shrink: 0;
+}
+.search-results .sr-name { font-weight: 600; }
+.search-results .sr-brand { font-size: 0.8rem; color: var(--muted); }
+
 /* Cronologia */
 .history-head { display: flex; justify-content: space-between; align-items: center; }
+.history-actions { display: flex; gap: 12px; }
+.link-btn.export { color: var(--green); }
 .link-btn {
   border: none; background: none; color: var(--red);
   font-weight: 600; cursor: pointer; font-size: 0.9rem;

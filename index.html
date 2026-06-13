@@ -9,6 +9,11 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" href="icon-192.png" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <!-- iOS: abilita la modalità app a schermo intero quando aggiunta alla Home -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="AllerScan" />
+  <meta name="mobile-web-app-capable" content="yes" />
 </head>
 <body>
   <header class="app-header">
@@ -69,6 +74,11 @@
         <button type="submit">🔍 Cerca</button>
       </form>
 
+      <form id="search-form" class="manual-form">
+        <input type="text" id="search-input" placeholder="Oppure cerca per nome (es. nutella)" autocomplete="off" />
+        <button type="submit">🔎 Trova</button>
+      </form>
+
       <div id="status" class="status" hidden></div>
       <div id="result" class="result"></div>
     </section>
@@ -77,7 +87,10 @@
     <section id="tab-history" class="tab-panel">
       <div class="history-head">
         <h2>Cronologia scansioni</h2>
-        <button id="clear-history" class="link-btn">🗑️ Svuota</button>
+        <div class="history-actions">
+          <button id="export-history" class="link-btn export">⬇️ Esporta</button>
+          <button id="clear-history" class="link-btn">🗑️ Svuota</button>
+        </div>
       </div>
       <p class="hint">Gli ultimi prodotti che hai controllato. Tocca una voce per rivederla.</p>
       <ul id="history-list" class="history-list"></ul>
