@@ -94,7 +94,7 @@ function clearHistory() {
   saveHistory([]);
   renderHistory();
 }
-const STATUS_ICON = { danger: "🚫", traces: "⚠️", safe: "✅", unknown: "ℹ️" };
+const STATUS_ICON = { danger: "🚫", traces: "⚠️", safe: "✅", unknown: "ℹ️", nodata: "⚠️" };
 
 function renderHistory() {
   const list = document.getElementById("history-list");
@@ -388,25 +388,30 @@ async function analyzeAndRender(product) {
   const brand = product.brands || "";
   const img = product.image_front_url || "";
   const ingText = getIngredientsText(product);
+  // Dati allergeni assenti se non c'è né la lista ingredienti né i tag allergeni
+  const hasData = ingText.trim().length > 0 ||
+    (product.allergens_tags && product.allergens_tags.length > 0);
 
-  let verdictClass, verdictText;
+  let verdictClass, verdictText, histStatus;
   if (allergens.length === 0) {
-    verdictClass = "unknown";
+    verdictClass = "unknown"; histStatus = "unknown";
     verdictText = "ℹ️ Nessun allergene impostato — aggiungili nella scheda \"I miei allergeni\".";
   } else if (danger.length) {
-    verdictClass = "danger";
+    verdictClass = "danger"; histStatus = "danger";
     verdictText = "🚫 ATTENZIONE! Contiene: " + danger.join(", ").toUpperCase();
   } else if (traces.length) {
-    verdictClass = "unknown";
+    verdictClass = "unknown"; histStatus = "traces";
     verdictText = "⚠️ Può contenere TRACCE di: " + traces.join(", ");
+  } else if (!hasData) {
+    // Trovato ma SENZA dati ingredienti: non è "sicuro", è "non verificabile"
+    verdictClass = "unknown"; histStatus = "nodata";
+    verdictText = "⚠️ Ingredienti non disponibili — non posso verificare. Controlla l'etichetta!";
   } else {
-    verdictClass = "safe";
+    verdictClass = "safe"; histStatus = "safe";
     verdictText = "✅ Nessuno dei tuoi allergeni rilevato";
   }
 
   // Salva nella cronologia (anche se nessun allergene impostato)
-  const histStatus = danger.length ? "danger" : traces.length ? "traces"
-    : allergens.length ? "safe" : "unknown";
   addToHistory({
     code: product.code || "",
     name, brand,
