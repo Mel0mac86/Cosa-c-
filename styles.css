@@ -259,6 +259,28 @@ h2 { font-size: 1.2rem; margin: 0 0 6px; }
 .nutri-d { background: #ee8100; }
 .nutri-e { background: #e63e11; }
 
+/* Cronologia */
+.history-head { display: flex; justify-content: space-between; align-items: center; }
+.link-btn {
+  border: none; background: none; color: var(--red);
+  font-weight: 600; cursor: pointer; font-size: 0.9rem;
+}
+.history-list { list-style: none; padding: 0; margin: 0; }
+.history-list li {
+  display: flex; gap: 12px; align-items: center;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer;
+}
+.history-list li:hover { border-color: var(--green); }
+.history-list img {
+  width: 46px; height: 46px; object-fit: contain;
+  background: #f1f5f9; border-radius: 8px; flex-shrink: 0;
+}
+.history-list .h-info { flex: 1; min-width: 0; }
+.history-list .h-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history-list .h-time { font-size: 0.78rem; color: var(--muted); }
+.h-badge { font-size: 1.3rem; flex-shrink: 0; }
+
 .app-footer {
   max-width: 560px;
   margin: 20px auto;

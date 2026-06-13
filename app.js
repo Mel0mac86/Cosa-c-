@@ -3,6 +3,8 @@
    ============================================================ */
 
 const STORAGE_KEY = "allerscan.allergens";
+const HISTORY_KEY = "allerscan.history";
+const HISTORY_MAX = 50;
 const OFF_BASE = "https://world.openfoodfacts.org";
 
 /* ---- Dizionario sinonimi (italiano <-> termini tag inglesi) ----
@@ -69,6 +71,58 @@ function renderAllergens() {
     list.appendChild(li);
   });
   empty.style.display = allergens.length ? "none" : "block";
+}
+
+/* ============================================================
+   Cronologia scansioni (localStorage)
+   ============================================================ */
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
+  catch { return []; }
+}
+function saveHistory(list) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+}
+function addToHistory(entry) {
+  let list = loadHistory().filter(e => e.code !== entry.code); // dedup per codice
+  list.unshift(entry);
+  if (list.length > HISTORY_MAX) list = list.slice(0, HISTORY_MAX);
+  saveHistory(list);
+  renderHistory();
+}
+function clearHistory() {
+  saveHistory([]);
+  renderHistory();
+}
+const STATUS_ICON = { danger: "🚫", traces: "⚠️", safe: "✅", unknown: "ℹ️" };
+
+function renderHistory() {
+  const list = document.getElementById("history-list");
+  const empty = document.getElementById("history-empty");
+  const items = loadHistory();
+  list.innerHTML = "";
+  items.forEach(e => {
+    const li = document.createElement("li");
+    li.innerHTML = `
+      ${e.image ? `<img src="${escapeHtml(e.image)}" alt="" />` : `<div style="width:46px;height:46px;background:#f1f5f9;border-radius:8px;flex-shrink:0"></div>`}
+      <div class="h-info">
+        <div class="h-name">${escapeHtml(e.name || "Prodotto " + e.code)}</div>
+        <div class="h-time">${escapeHtml(e.brand || "")}${e.brand ? " · " : ""}${formatTime(e.ts)}</div>
+      </div>
+      <div class="h-badge">${STATUS_ICON[e.status] || ""}</div>`;
+    li.addEventListener("click", () => {
+      document.querySelector('.tab-btn[data-tab="scan"]').click();
+      lookupProduct(e.code);
+    });
+    list.appendChild(li);
+  });
+  empty.style.display = items.length ? "none" : "block";
+}
+
+function formatTime(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  return d.toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
 /* Termini di ricerca espansi per un allergene dato */
@@ -265,6 +319,17 @@ async function analyzeAndRender(product) {
     verdictText = "✅ Nessuno dei tuoi allergeni rilevato";
   }
 
+  // Salva nella cronologia (anche se nessun allergene impostato)
+  const histStatus = danger.length ? "danger" : traces.length ? "traces"
+    : allergens.length ? "safe" : "unknown";
+  addToHistory({
+    code: product.code || "",
+    name, brand,
+    image: product.image_front_url || "",
+    status: histStatus,
+    ts: Date.now(),
+  });
+
   let html = `
     <div class="product-card">
       <div class="verdict ${verdictClass}">${verdictText}</div>
@@ -381,10 +446,16 @@ function escapeRegExp(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/* Pulsante svuota cronologia */
+document.getElementById("clear-history").addEventListener("click", () => {
+  if (confirm("Vuoi svuotare la cronologia delle scansioni?")) clearHistory();
+});
+
 /* ============================================================
    Avvio
    ============================================================ */
 renderAllergens();
+renderHistory();
 if (allergens.length === 0) {
   // porta l'utente prima a impostare gli allergeni
   document.querySelector('.tab-btn[data-tab="allergens"]').click();
