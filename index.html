@@ -7,6 +7,13 @@
   <title>AllerScan — Scanner allergeni</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <!-- iOS: abilita la modalità app a schermo intero quando aggiunta alla Home -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="AllerScan" />
+  <meta name="mobile-web-app-capable" content="yes" />
 </head>
 <body>
   <header class="app-header">
@@ -17,7 +24,8 @@
   <!-- Navigazione a schede -->
   <nav class="tabs">
     <button class="tab-btn active" data-tab="scan">📷 Scansiona</button>
-    <button class="tab-btn" data-tab="allergens">⚠️ I miei allergeni</button>
+    <button class="tab-btn" data-tab="allergens">⚠️ Allergeni</button>
+    <button class="tab-btn" data-tab="history">🕓 Cronologia</button>
   </nav>
 
   <main>
@@ -66,8 +74,27 @@
         <button type="submit">🔍 Cerca</button>
       </form>
 
+      <form id="search-form" class="manual-form">
+        <input type="text" id="search-input" placeholder="Oppure cerca per nome (es. nutella)" autocomplete="off" />
+        <button type="submit">🔎 Trova</button>
+      </form>
+
       <div id="status" class="status" hidden></div>
       <div id="result" class="result"></div>
+    </section>
+
+    <!-- SEZIONE CRONOLOGIA -->
+    <section id="tab-history" class="tab-panel">
+      <div class="history-head">
+        <h2>Cronologia scansioni</h2>
+        <div class="history-actions">
+          <button id="export-history" class="link-btn export">⬇️ Esporta</button>
+          <button id="clear-history" class="link-btn">🗑️ Svuota</button>
+        </div>
+      </div>
+      <p class="hint">Gli ultimi prodotti che hai controllato. Tocca una voce per rivederla.</p>
+      <ul id="history-list" class="history-list"></ul>
+      <p id="history-empty" class="empty-note">Nessuna scansione ancora. I prodotti che controlli appariranno qui.</p>
     </section>
   </main>
 
@@ -79,5 +106,15 @@
   <!-- Libreria scansione codici a barre -->
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
   <script src="app.js"></script>
+  <script>
+    // Registra il service worker per l'uso offline (PWA installabile)
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(err =>
+          console.warn("Service worker non registrato:", err)
+        );
+      });
+    }
+  </script>
 </body>
 </html>
